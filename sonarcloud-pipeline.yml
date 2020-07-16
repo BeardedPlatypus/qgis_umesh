@@ -1,19 +1,46 @@
-# Starter pipeline
-# Start with a minimal pipeline that you can customize to build and deploy your code.
-# Add steps that build, run tests, deploy, and more:
-# https://aka.ms/yaml
-
 trigger:
 - master
 
 pool:
-  vmImage: 'ubuntu-latest'
+  vmImage: 'windows-2019'
+
+variables:
+  solution: '**/qgis_umesh.sln'
+  buildPlatform: 'x64'
+  buildConfiguration: 'Release'
+  buildWrapperOutputDir: '$(Build.SourcesDirectory)/build_wrapper_output_directory'
+  buildWrapperExe: '$(Build.SourcesDirectory)/tools/build-wrapper-win-x86-64.exe'
+  msBuildExe: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Enterprise\MSBuild\Current\Bin\MSBuild.exe'
 
 steps:
-- script: echo Hello, world!
-  displayName: 'Run a one-line script'
+- task: NuGetToolInstaller@0
+  displayName: 'Nuget - Install'
 
-- script: |
-    echo Add other tasks to build, test, and deploy your project.
-    echo See https://aka.ms/yaml
-  displayName: 'Run a multi-line script'
+- task: NuGetCommand@2
+  displayName: 'Nuget - Restore Packages'
+  inputs:
+    restoreSolution: '$(solution)'
+
+- task: SonarCloudPrepare@1
+  displayName: 'SonarCloud - Prepare'
+  inputs:
+    SonarCloud: 'UMESH_SonarCloud'
+    organization: 'beardedplatypus'
+    scannerMode: 'MSBuild'
+    projectKey: 'BeardedPlatypus_qgis_umesh'
+    projectName: 'qgis_umesh'
+    extraProperties: sonar.cfamily.build-wrapper-output=$(buildWrapperOutputDir)
+
+- task: PowerShell@2
+  displayName: MSBuild
+  inputs:
+    targetType: 'inline'
+    script: '& $(buildWrapperExe) --out-dir $(buildWrapperOutputDir) "$(msBuildExe)" $(solution) -nologo -p:Configuration=$(buildConfiguration) -p:Platform=$(buildPlatform)'
+    
+- task: SonarCloudAnalyze@1
+  displayName: 'SonarCloud - Analyze'
+
+- task: SonarCloudPublish@1
+  displayName: 'SonarCloud - Publish'
+  inputs:
+    pollingTimeoutSec: '300'
